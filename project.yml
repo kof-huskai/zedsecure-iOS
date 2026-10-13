@@ -1,6 +1,6 @@
 name: ZedSecureiOS
 options:
-  bundleIdPrefix: com.example   # TODO: change to your own reverse-domain prefix
+  bundleIdPrefix: com.zedsecure   # TODO: change to your own reverse-domain prefix
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
@@ -26,7 +26,7 @@ targets:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
         com.apple.security.application-groups:
-          - group.com.example.zedsecureios
+          - group.com.zedsecure
     info:
       path: App/Info.plist
       properties:
@@ -37,7 +37,7 @@ targets:
         NSCameraUsageDescription: Used to scan QR codes containing server configs.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.zedsecureios
+        PRODUCT_BUNDLE_IDENTIFIER: com.zedsecure
     dependencies:
       - target: PacketTunnel
         embed: true
@@ -54,7 +54,7 @@ targets:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
         com.apple.security.application-groups:
-          - group.com.example.zedsecureios
+          - group.com.zedsecure
     info:
       path: PacketTunnel/Info.plist
       properties:
