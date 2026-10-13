@@ -64,7 +64,7 @@ targets:
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.zedsecureios.PacketTunnel
+          PRODUCT_BUNDLE_IDENTIFIER: com.zedsecure.PacketTunnel
     # After building the cores (tools/build-cores.sh), uncomment:
     # dependencies:
     #   - framework: Frameworks/LibXray.xcframework
