@@ -42,9 +42,10 @@ struct ContentView: View {
             }
             .navigationTitle("ZedSecure")
             .toolbar {
-                Button("Paste", systemImage: "doc.on.clipboard", action: pasteFromClipboard)
+                Button(action: pasteFromClipboard) {
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                }
             }
-        }
     }
 
     private func pasteFromClipboard() {
