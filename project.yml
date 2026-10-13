@@ -1,0 +1,71 @@
+name: ZedSecureiOS
+options:
+  bundleIdPrefix: com.example   # TODO: change to your own reverse-domain prefix
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Set your team ID here (or pass DEVELOPMENT_TEAM=... to xcodebuild)
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  ZedSecureiOS:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+    entitlements:
+      path: App/App.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.com.example.zedsecureios
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: ZedSecure
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSCameraUsageDescription: Used to scan QR codes containing server configs.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.zedsecureios
+    dependencies:
+      - target: PacketTunnel
+        embed: true
+
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PacketTunnel
+      - Shared
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.com.example.zedsecureios
+    info:
+      path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: ZedSecure Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.zedsecureios.PacketTunnel
+    # After building the cores (tools/build-cores.sh), uncomment:
+    # dependencies:
+    #   - framework: Frameworks/LibXray.xcframework
+    #   - framework: Frameworks/Libbox.xcframework
