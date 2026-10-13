@@ -46,6 +46,7 @@ struct ContentView: View {
                     Label("Paste", systemImage: "doc.on.clipboard")
                 }
             }
+        }
     }
 
     private func pasteFromClipboard() {
