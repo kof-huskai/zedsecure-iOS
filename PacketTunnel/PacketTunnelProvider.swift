@@ -1,41 +1,118 @@
+import Foundation
+import Libbox
 import NetworkExtension
 
-/// Milestone 1 stub: validates the config handoff and brings up the virtual interface.
-///
-/// WARNING: until a proxy core is wired in below, packets entering the tunnel go nowhere,
-/// so the device will have no internet while "connected".
-///
-/// Milestone 2 (TODO): embed sing-box `Libbox.xcframework` (tools/build-cores.sh),
-/// implement its PlatformInterface using `packetFlow` / the tun file descriptor,
-/// and start the service with the JSON from `ConfigBuilder`.
+/// Runs sing-box inside the Network Extension. The app hands over a ready sing-box
+/// JSON config through `providerConfiguration["config"]` (see ConfigBuilder).
 final class PacketTunnelProvider: NEPacketTunnelProvider {
+    private var commandServer: LibboxCommandServer?
+    private lazy var platformInterface = PlatformInterface(self)
+    private var configContent: String?
 
-    override func startTunnel(options: [String: NSObject]?) async throws {
+    override func startTunnel(options _: [String: NSObject]?) async throws {
         guard let proto = protocolConfiguration as? NETunnelProviderProtocol,
               let config = proto.providerConfiguration?["config"] as? String,
-              !config.isEmpty else {
-            throw NSError(domain: "ZedSecure", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Missing config"])
+              !config.isEmpty
+        else {
+            throw TunnelError("missing config")
+        }
+        configContent = config
+
+        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroup) else {
+            throw TunnelError("app group container unavailable: \(AppConstants.appGroup)")
+        }
+        let basePath = container.path
+        let workingPath = container.appendingPathComponent("Working", isDirectory: true).path
+        let tempPath = container.appendingPathComponent("Caches", isDirectory: true).path
+
+        let setup = LibboxSetupOptions()
+        setup.basePath = basePath
+        setup.workingPath = workingPath
+        setup.tempPath = tempPath
+        setup.logMaxLines = 3000
+
+        var setupError: NSError?
+        LibboxSetup(setup, &setupError)
+        if let setupError {
+            throw TunnelError("setup: \(setupError.localizedDescription)")
         }
 
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+        // Network Extensions are killed at ~50 MB on iOS; this makes the Go runtime respect that.
+        LibboxSetMemoryLimit(true)
 
-        let ipv4 = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
-        ipv4.includedRoutes = [NEIPv4Route.default()]
-        settings.ipv4Settings = ipv4
+        var serverError: NSError?
+        commandServer = LibboxNewCommandServer(platformInterface, platformInterface, &serverError)
+        if let serverError {
+            throw TunnelError("create command server: \(serverError.localizedDescription)")
+        }
+        do {
+            try commandServer!.start()
+        } catch {
+            throw TunnelError("start command server: \(error.localizedDescription)")
+        }
 
-        let dns = NEDNSSettings(servers: ["1.1.1.1", "8.8.8.8"])
-        dns.matchDomains = [""]
-        settings.dnsSettings = dns
-        settings.mtu = 1400
+        try await startService()
+    }
 
-        try await setTunnelNetworkSettings(settings)
+    private func startService() async throws {
+        guard let config = configContent else {
+            throw TunnelError("missing config")
+        }
+        let overrideOptions = LibboxOverrideOptions()
+        do {
+            try commandServer!.startOrReloadService(config, options: overrideOptions)
+        } catch {
+            throw TunnelError("start service: \(error.localizedDescription)")
+        }
+    }
 
-        // TODO: start the core with `config` here.
-        _ = config
+    func stopService() {
+        do {
+            try commandServer?.closeService()
+        } catch {
+            writeMessage("stop service: \(error.localizedDescription)")
+        }
+        platformInterface.reset()
+    }
+
+    func reloadService() async throws {
+        writeMessage("reloading service")
+        reasserting = true
+        defer { reasserting = false }
+        try await startService()
     }
 
     override func stopTunnel(with reason: NEProviderStopReason) async {
-        // TODO: stop the core here.
+        writeMessage("stopping, reason: \(reason.rawValue)")
+        stopService()
+        if let server = commandServer {
+            try? await Task.sleep(nanoseconds: 100 * NSEC_PER_MSEC)
+            server.close()
+            commandServer = nil
+        }
+    }
+
+    override func sleep() async {
+        commandServer?.pause()
+    }
+
+    override func wake() {
+        commandServer?.wake()
+    }
+
+    func writeMessage(_ message: String) {
+        commandServer?.writeMessage(2, message: "(packet-tunnel) " + message)
+    }
+}
+
+struct TunnelError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? {
+        "(packet-tunnel) error: \(message)"
     }
 }

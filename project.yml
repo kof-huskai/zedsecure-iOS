@@ -64,8 +64,12 @@ targets:
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
     settings:
       base:
-          PRODUCT_BUNDLE_IDENTIFIER: com.zedsecure.PacketTunnel
-    # After building the cores (tools/build-cores.sh), uncomment:
-    # dependencies:
-    #   - framework: Frameworks/LibXray.xcframework
-    #   - framework: Frameworks/Libbox.xcframework
+        PRODUCT_BUNDLE_IDENTIFIER: com.zedsecure.PacketTunnel
+        # Libbox is a Go static library with Objective-C bindings.
+        OTHER_LDFLAGS: "$(inherited) -ObjC"
+    dependencies:
+      # Built by tools/build-cores.sh (the CI "libbox" job) into Frameworks/.
+      # Static, so it is linked and not embedded.
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+      - sdk: libresolv.tbd

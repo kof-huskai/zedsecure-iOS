@@ -21,12 +21,3 @@ enum ServerStore {
         }
     }
 }
-
-enum ConfigBuilder {
-    /// TODO: parse `server.rawLink` and produce a full sing-box JSON config
-    /// (inbound: tun, outbound: the server, plus DNS and route rules).
-    /// For milestone 1 this returns the raw link so the plumbing can be tested end to end.
-    static func build(for server: Server) -> String {
-        server.rawLink
-    }
-}

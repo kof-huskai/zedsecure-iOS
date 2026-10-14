@@ -29,12 +29,30 @@ Settings → Secrets and variables → Actions:
 - **Build (unsigned):** با هر push اجرا می‌شود و فقط بررسی می‌کند پروژه کامپایل می‌شود.
 - **Release (signed IPA):** از تب Actions دستی اجرا کنید (یا تگ `v0.1.0` بزنید). خروجی IPA امضاشده و در حالت `app-store-connect` آپلود خودکار به TestFlight است.
 
+## وضعیت فعلی
+
+- ✅ UI، مدیریت سرورها، چسباندن لینک از کلیپ‌بورد
+- ✅ تبدیل لینک به کانفیگ sing-box (`Shared/ConfigBuilder.swift`): `vless`، `vmess`، `trojan`، `ss`، `hysteria2`/`hy2` (روی TCP/WS/gRPC/HTTP/HTTPUpgrade، با TLS و Reality)
+- ✅ هسته‌ی sing-box (libbox، نسخه‌ی پین‌شده‌ی `v1.13.21`) در CI ساخته و به افزونه‌ی تونل وصل می‌شود
+- ⏳ **هنوز روی دستگاه واقعی تست نشده.** کد Swift را فقط CI کامپایل می‌کند.
+
+لینک‌هایی که هنوز پشتیبانی نمی‌شوند (به‌جای کانفیگ اشتباه، خطای روشن می‌دهند): XHTTP، VLESS encryption، افزونه‌های Shadowsocks، `pinSHA256` در Hysteria2، TCP با header اچ‌تی‌تی‌پی. TUIC و WireGuard هنوز اضافه نشده‌اند.
+
+## CI
+
+کارهای workflow `Build (unsigned)`:
+
+1. `libbox`: ساخت هسته‌ی sing-box برای iOS (بار اول حدود ۱۰ تا ۲۰ دقیقه، بعد از آن cache می‌شود)
+2. `config-tests`: تست‌های `Tests/main.swift` روی ConfigBuilder
+3. `config-check`: کانفیگ‌های تولیدشده را با خود `sing-box check` اعتبارسنجی می‌کند
+4. `build`: ساخت اپ و افزونه
+
 ## نقشه‌ی راه
 1. ✅ اسکلت + CI
-2. وصل کردن sing-box (`tools/build-cores.sh` → `Libbox.xcframework` → PlatformInterface در `PacketTunnelProvider`)
-3. تبدیل لینک‌های share به کانفیگ sing-box (`ConfigBuilder`)
-4. import اشتراک، QR، تست سرعت
-5. Xray (libXray) و بقیه‌ی موتورها
+2. ✅ وصل کردن sing-box و ConfigBuilder
+3. تست روی دستگاه (امضا با اکانت پولی، TestFlight) و رفع خطاها
+4. import اشتراک (subscription)، QR، تست سرعت، انتخاب خودکار سریع‌ترین سرور
+5. Xray (libXray) برای XHTTP و بقیه، سپس موتورهای دیگر
 
 ## لایسنس
 اگر از کد ZedSecure (AGPL-3.0) کپی کنید، این پروژه هم باید AGPL-3.0 و متن‌باز باشد. sing-box هم GPL-3.0 است. فایل `LICENSE` را قبل از انتشار اضافه کنید.

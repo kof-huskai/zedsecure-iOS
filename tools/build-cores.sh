@@ -1,40 +1,38 @@
 #!/usr/bin/env bash
-# Builds the proxy core as an .xcframework for iOS. Must run on macOS (use the CI runner).
+# Builds sing-box's libbox as an iOS .xcframework and packs it into Libbox.xcframework.tgz
+# in the repository root. Must run on macOS with Xcode (the CI "libbox" job does this).
 #
-# UNVERIFIED SCAFFOLD: the upstream build commands change between versions.
-# Check the README / Makefile of each repo at the pinned tag before relying on this.
+# The version is pinned on purpose: PacketTunnel/PlatformInterface.swift is written against
+# the libbox API of this exact release. Bump SING_BOX_REF only together with that file.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="$ROOT/.cores"
-OUT="$ROOT/Frameworks"
-SING_BOX_REF="${SING_BOX_REF:-main}"   # TODO: pin to a release tag
+WORK="${WORK_DIR:-$ROOT/.cores}"
+SING_BOX_REF="${SING_BOX_REF:-v1.13.21}"
+OUTPUT="$ROOT/Libbox.xcframework.tgz"
 
-mkdir -p "$WORK" "$OUT"
-
-# Go toolchain: on GitHub Actions use actions/setup-go before this script.
 go version
 
-# --- sing-box (libbox) ------------------------------------------------------
-# Milestone 2 uses sing-box alone: libbox ships its own tun handling for iOS and
-# covers VLESS/Reality, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard.
-if [ ! -d "$WORK/sing-box" ]; then
-  git clone https://github.com/SagerNet/sing-box.git "$WORK/sing-box"
+mkdir -p "$WORK"
+if [ ! -d "$WORK/sing-box/.git" ]; then
+  git clone --depth 1 --branch "$SING_BOX_REF" https://github.com/SagerNet/sing-box.git "$WORK/sing-box"
 fi
-(
-  cd "$WORK/sing-box"
-  git fetch --tags
-  git checkout "$SING_BOX_REF"
-  go install -v github.com/sagernet/gomobile/cmd/gomobile@latest
-  go install -v github.com/sagernet/gomobile/cmd/gobind@latest
-  # Upstream Makefile target at time of writing: `make lib_ios`
-  # (runs: go run ./cmd/internal/build_libbox -target apple -platform ios)
-  make lib_ios
-)
-rm -rf "$OUT/Libbox.xcframework"
-cp -R "$WORK/sing-box/Libbox.xcframework" "$OUT/"
 
-# --- Xray (later) -----------------------------------------------------------
-# XTLS/libXray provides an Apple build; add it only once sing-box works end to end.
+cd "$WORK/sing-box"
+git describe --tags || true
 
-echo "Done: $OUT"
+# Same gomobile fork and version that sing-box's own Makefile (lib_install) uses.
+go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+export PATH="$(go env GOPATH)/bin:$PATH"
+
+# iOS device only (arm64) to keep CI time down. The upstream default also builds
+# simulator, tvOS and macOS slices; use -platform ios,iossimulator for simulator builds.
+go run ./cmd/internal/build_libbox -target apple -platform ios
+
+test -d Libbox.xcframework
+
+rm -f "$OUTPUT"
+# tar keeps the framework layout intact (upload-artifact would flatten symlinks).
+tar -czf "$OUTPUT" Libbox.xcframework
+echo "Wrote $OUTPUT"
