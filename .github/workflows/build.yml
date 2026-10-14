@@ -1,16 +1,111 @@
 name: Build (unsigned)
 
+# Compile check. No Apple account needed.
+# The unsigned IPA is only for CI feedback; the VPN extension needs a paid-profile signature to run.
+
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
 
+env:
+  SING_BOX_REF: v1.13.21
+  GO_VERSION: "1.25.12"
+
 jobs:
-  build:
+  libbox:
+    name: Build libbox (sing-box core)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore cached libbox
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: Libbox.xcframework.tgz
+          key: libbox-ios-${{ env.SING_BOX_REF }}-${{ hashFiles('tools/build-cores.sh') }}
+
+      - uses: actions/setup-go@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build libbox
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash tools/build-cores.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libbox-ios
+          path: Libbox.xcframework.tgz
+
+  config-tests:
+    name: ConfigBuilder tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile and run tests
+        run: |
+          mkdir -p out
+          swiftc -o out/linktests Shared/Constants.swift Shared/Server.swift Shared/ConfigBuilder.swift Tests/main.swift
+          out/linktests out/configs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-configs
+          path: out/configs
+
+  config-check:
+    name: Validate configs with sing-box
+    needs: config-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sample-configs
+          path: configs
+
+      - name: Install sing-box
+        run: |
+          go install -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" \
+            github.com/sagernet/sing-box/cmd/sing-box@${SING_BOX_REF}
+
+      - name: sing-box check
+        run: |
+          status=0
+          for file in configs/*.json; do
+            echo "== $file"
+            if ! "$(go env GOPATH)/bin/sing-box" check -c "$file"; then
+              echo "::error::sing-box rejected $file"
+              status=1
+            fi
+          done
+          exit $status
+
+  build:
+    name: Build app
+    needs: [libbox, config-tests]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libbox-ios
+          path: libbox
+
+      - name: Unpack libbox
+        run: |
+          mkdir -p Frameworks
+          tar -xzf libbox/Libbox.xcframework.tgz -C Frameworks
+          ls Frameworks/Libbox.xcframework
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -33,7 +128,7 @@ jobs:
       - name: Show compile errors
         if: failure()
         run: |
-          grep -E "error:" build.log | sort -u | head -20 | while IFS= read -r line; do echo "::error::${line}"; done
+          grep -E "error:|ld: |Undefined symbol|clang: error" build.log | sort -u | head -30 | while IFS= read -r line; do echo "::error::${line}"; done
 
       - name: Package unsigned IPA
         run: |
